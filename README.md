@@ -63,6 +63,11 @@ npx -y @smithery/cli@latest install @JackKuo666/semanticscholar-mcp-server --cli
    python semantic_scholar_server.py
    ```
 
+   If you have a Semantic Scholar API key, set it as `S2_API_KEY` before starting the server.
+   ```
+   export S2_API_KEY="your_api_key_here"
+   ```
+
 2. The server will start and listen for MCP requests.
 
 3. Use an MCP client to interact with the server and access the following tools:
@@ -99,7 +104,9 @@ Add this configuration to your `claude_desktop_config.json`:
       "args": [
         "D:\\code\\YOUR\\PATH\\semanticscholar-MCP-Server\\semanticscholar_server.py"
       ],
-      "env": {},
+      "env": {
+        "S2_API_KEY": "your_api_key_here"
+      },
       "disabled": false,
       "autoApprove": []
     }
@@ -116,7 +123,9 @@ Using with Cline
         "-c",
         "source /home/YOUR/PATH/.venv/bin/activate && python /home/YOUR/PATH/semanticscholar_mcp_server.py"
       ],
-      "env": {},
+      "env": {
+        "S2_API_KEY": "your_api_key_here"
+      },
       "disabled": false,
       "autoApprove": []
     }
