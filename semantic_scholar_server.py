@@ -13,7 +13,7 @@ mcp = FastMCP("semanticscholar")
 # Initialize SemanticScholar client
 client = initialize_client()
 
-@mcp.tool()
+@mcp.tool(description="Search for papers on Semantic Scholar using a query string.")
 async def search_semantic_scholar(query: str, num_results: int = 10) -> List[Dict[str, Any]]:
     """
     Search for papers on Semantic Scholar using a query string.
@@ -34,7 +34,7 @@ async def search_semantic_scholar(query: str, num_results: int = 10) -> List[Dic
         return [{"error": f"An error occurred while searching: {str(e)}"}]
 
 
-@mcp.tool()
+@mcp.tool(description="Get details of a specific paper on Semantic Scholar.")
 async def get_semantic_scholar_paper_details(paper_id: str) -> Dict[str, Any]:
     """
     Get details of a specific paper on Semantic Scholar.
@@ -62,7 +62,7 @@ async def get_semantic_scholar_paper_details(paper_id: str) -> Dict[str, Any]:
     except Exception as e:
         return {"error": f"An error occurred while fetching paper details: {str(e)}"}
 
-@mcp.tool()
+@mcp.tool(description="Get details of a specific author on Semantic Scholar.")
 async def get_semantic_scholar_author_details(author_id: str) -> Dict[str, Any]:
     """
     Get details of a specific author on Semantic Scholar.
@@ -88,7 +88,7 @@ async def get_semantic_scholar_author_details(author_id: str) -> Dict[str, Any]:
     except Exception as e:
         return {"error": f"An error occurred while fetching author details: {str(e)}"}
 
-@mcp.tool()
+@mcp.tool(description="Get citations and references for a specific Semantic Scholar paper.")
 async def get_semantic_scholar_citations_and_references(paper_id: str) -> Dict[str, List[Dict[str, Any]]]:
     """
     Get citations and references for a specific paper on Semantic Scholar.

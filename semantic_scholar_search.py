@@ -4,7 +4,7 @@ from semanticscholar.SemanticScholarException import (
     InternalServerErrorException,
     GatewayTimeoutException,
 )
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any, Awaitable, Callable
 import os
 import logging
 import random
@@ -61,42 +61,60 @@ def _is_retriable_error(error: Exception) -> bool:
     return any(token in message for token in retriable_tokens)
 
 
-def _call_with_rate_limit_and_backoff(
-    operation: Callable[..., Any], *args: Any, **kwargs: Any
-) -> Any:
-    """Execute an API operation under 1 RPS + exponential backoff retries."""
-    for attempt in range(MAX_RETRIES + 1):
-        _wait_for_request_slot()
-        try:
-            return operation(*args, **kwargs)
-        except Exception as error:
-            should_retry = attempt < MAX_RETRIES and _is_retriable_error(error)
-            if not should_retry:
-                raise
+def _wrap_requester_with_controls(requester: Any) -> None:
+    """
+    Wrap requester.get_data_async so every HTTP call (including pagination pages)
+    is globally rate-limited and retried with exponential backoff.
+    """
+    if getattr(requester, "_s2_rate_limit_wrapped", False):
+        return
 
-            backoff = min(BACKOFF_MAX_SECONDS, BACKOFF_BASE_SECONDS * (2 ** attempt))
-            jitter = random.uniform(0.0, BACKOFF_JITTER_SECONDS)
-            delay = backoff + jitter
-            logger.warning(
-                "Semantic Scholar request failed with retriable error (%s). "
-                "Retrying in %.2fs (%d/%d).",
-                error,
-                delay,
-                attempt + 1,
-                MAX_RETRIES,
-            )
-            time.sleep(delay)
+    original_get_data_async: Callable[..., Awaitable[Any]] = requester.get_data_async
+
+    async def controlled_get_data_async(
+        url: str, parameters: str, headers: dict, payload: dict = None
+    ) -> Any:
+        for attempt in range(MAX_RETRIES + 1):
+            _wait_for_request_slot()
+            try:
+                return await original_get_data_async(url, parameters, headers, payload)
+            except Exception as error:
+                should_retry = attempt < MAX_RETRIES and _is_retriable_error(error)
+                if not should_retry:
+                    raise
+
+                backoff = min(BACKOFF_MAX_SECONDS, BACKOFF_BASE_SECONDS * (2 ** attempt))
+                jitter = random.uniform(0.0, BACKOFF_JITTER_SECONDS)
+                delay = backoff + jitter
+                logger.warning(
+                    "Semantic Scholar HTTP request failed (%s). "
+                    "Retrying in %.2fs (%d/%d).",
+                    error,
+                    delay,
+                    attempt + 1,
+                    MAX_RETRIES,
+                )
+                time.sleep(delay)
+
+        raise RuntimeError("Unexpected retry loop state.")
+
+    requester.get_data_async = controlled_get_data_async
+    requester._s2_rate_limit_wrapped = True
 
 def initialize_client() -> SemanticScholar:
     """Initialize the SemanticScholar client."""
     api_key = os.getenv("S2_API_KEY", "").strip()
     if api_key:
-        return SemanticScholar(api_key=api_key, retry=False)
-    return SemanticScholar(retry=False)
+        client = SemanticScholar(api_key=api_key, retry=False)
+    else:
+        client = SemanticScholar(retry=False)
+
+    _wrap_requester_with_controls(client._AsyncSemanticScholar._requester)
+    return client
 
 def search_papers(client: SemanticScholar, query: str, limit: int = 10) -> List[Dict[str, Any]]:
     """Search for papers using a query string."""
-    results = _call_with_rate_limit_and_backoff(client.search_paper, query, limit=limit)
+    results = client.search_paper(query, limit=limit)
     return [
         {
             "paperId": paper.paperId,
@@ -113,11 +131,11 @@ def search_papers(client: SemanticScholar, query: str, limit: int = 10) -> List[
 
 def get_paper_details(client: SemanticScholar, paper_id: str) -> Paper:
     """Get details of a specific paper."""
-    return _call_with_rate_limit_and_backoff(client.get_paper, paper_id)
+    return client.get_paper(paper_id)
 
 def get_author_details(client: SemanticScholar, author_id: str) -> Author:
     """Get details of a specific author."""
-    return _call_with_rate_limit_and_backoff(client.get_author, author_id)
+    return client.get_author(author_id)
 
 def get_citations_and_references(paper: Paper) -> Dict[str, List[Dict[str, Any]]]:
     """Get citations and references for a paper."""
